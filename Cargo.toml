@@ -2,6 +2,9 @@
 name = "audiobookshelf-mcp"
 version = "0.2.0"
 edition = "2021"
+license = "MIT"
+authors = ["Sandy McArthur, Jr."]
+repository = "https://github.com/sandymac/audiobookshelf-mcp"
 
 [[bin]]
 name = "audiobookshelf-mcp"

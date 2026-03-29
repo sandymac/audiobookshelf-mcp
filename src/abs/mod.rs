@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Sandy McArthur, Jr.
+// SPDX-License-Identifier: MIT
+
 use anyhow::Context;
 use reqwest::{header, Client, StatusCode};
 use serde_json::Value;
