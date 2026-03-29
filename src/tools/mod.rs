@@ -133,7 +133,10 @@ impl AbsServer {
     /// List all libraries on the Audiobookshelf server.
     /// Returns each library's ID, name, media type (book or podcast), and folder paths.
     /// Use the library IDs with other tools to browse or search content.
-    #[tool]
+    #[tool(
+        title = "List Libraries",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn list_libraries(&self) -> Result<String, String> {
         self.client
             .get("/libraries")
@@ -145,7 +148,10 @@ impl AbsServer {
     /// Search a library for audiobooks, podcasts, authors, series, narrators, or tags.
     /// Results are grouped by type (book/podcast, authors, series, narrators, tags).
     /// Use `list_libraries` first to get a library ID.
-    #[tool]
+    #[tool(
+        title = "Search Library",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn search_library(
         &self,
         Parameters(params): Parameters<SearchLibraryParams>,
@@ -164,7 +170,10 @@ impl AbsServer {
     /// Get a paginated list of items from a library with optional sorting.
     /// Returns item IDs, titles, authors, duration, and progress for each item.
     /// Use `get_item` for the full details of a specific item.
-    #[tool]
+    #[tool(
+        title = "Get Library Items",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn get_library_items(
         &self,
         Parameters(params): Parameters<GetLibraryItemsParams>,
@@ -190,7 +199,10 @@ impl AbsServer {
     /// Get full details for a specific library item: metadata, chapters, audio files,
     /// authors, series, and current listening progress.
     /// Use `search_library` or `get_library_items` to find item IDs.
-    #[tool]
+    #[tool(
+        title = "Get Item",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn get_item(
         &self,
         Parameters(params): Parameters<GetItemParams>,
@@ -207,7 +219,10 @@ impl AbsServer {
 
     /// Get all audiobooks and podcast episodes currently in progress for the authenticated user.
     /// Shows each item's current position, progress percentage, and time remaining.
-    #[tool]
+    #[tool(
+        title = "Get In Progress",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn get_in_progress(&self) -> Result<String, String> {
         self.client
             .get("/me/items-in-progress")
@@ -218,7 +233,10 @@ impl AbsServer {
 
     /// Get listening statistics for the authenticated user: total time, time per day of week,
     /// daily breakdown, and most-listened items.
-    #[tool]
+    #[tool(
+        title = "Get Listening Stats",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn get_listening_stats(&self) -> Result<String, String> {
         self.client
             .get("/me/listening-stats")
@@ -229,7 +247,10 @@ impl AbsServer {
 
     /// Get recent playback sessions for the authenticated user, paginated.
     /// Each session shows the item played, start/end time, and minutes listened.
-    #[tool]
+    #[tool(
+        title = "Get Recent Sessions",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn get_recent_sessions(
         &self,
         Parameters(params): Parameters<GetRecentSessionsParams>,
@@ -252,7 +273,10 @@ impl AbsServer {
     /// Update listening progress for an audiobook or podcast episode.
     /// Use to record playback position, mark an item finished, or reset progress.
     /// For podcasts, provide episode_id. Enable with: --enable-tool update_progress
-    #[tool]
+    #[tool(
+        title = "Update Progress",
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn update_progress(
         &self,
         Parameters(params): Parameters<UpdateProgressParams>,
@@ -281,7 +305,10 @@ impl AbsServer {
     /// Create a bookmark at a specific playback position in an audiobook.
     /// Returns the updated list of bookmarks for the item.
     /// Enable with: --enable-tool create_bookmark
-    #[tool]
+    #[tool(
+        title = "Create Bookmark",
+        annotations(destructive_hint = false, open_world_hint = false)
+    )]
     pub async fn create_bookmark(
         &self,
         Parameters(params): Parameters<CreateBookmarkParams>,
@@ -301,7 +328,10 @@ impl AbsServer {
     /// The `time` value must exactly match an existing bookmark (use `get_item` to list bookmarks).
     /// Returns the updated list of bookmarks.
     /// Enable with: --enable-tool delete_bookmark
-    #[tool]
+    #[tool(
+        title = "Delete Bookmark",
+        annotations(destructive_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
     pub async fn delete_bookmark(
         &self,
         Parameters(params): Parameters<DeleteBookmarkParams>,
