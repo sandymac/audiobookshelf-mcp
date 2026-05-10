@@ -45,6 +45,10 @@ struct Args {
     #[arg(long, env = "ABS_HTTP_API_TOKEN")]
     http_api_token: Option<String>,
 
+    /// Allow unauthenticated HTTP when binding to a non-loopback address
+    #[arg(long)]
+    allow_unauthenticated_http: bool,
+
     /// Enable a tool by name — repeatable, processed before --disable-tool
     #[arg(long = "enable-tool", value_name = "NAME")]
     enable_tools: Vec<String>,
@@ -146,10 +150,25 @@ async fn main() -> anyhow::Result<()> {
 
         Transport::Http => {
             if args.http_api_token.is_none() {
-                tracing::warn!(
-                    "HTTP transport started without --http-api-token: \
-                     the /mcp endpoint is unauthenticated"
-                );
+                if !args.http_bind.ip().is_loopback() && !args.allow_unauthenticated_http {
+                    anyhow::bail!(
+                        "refusing unauthenticated HTTP bind to {}. Provide --http-api-token / \
+                         ABS_HTTP_API_TOKEN or pass --allow-unauthenticated-http explicitly.",
+                        args.http_bind
+                    );
+                }
+                if args.http_bind.ip().is_loopback() {
+                    tracing::warn!(
+                        "HTTP transport started on loopback without --http-api-token: \
+                         the /mcp endpoint is unauthenticated"
+                    );
+                } else {
+                    tracing::warn!(
+                        "HTTP transport started on a non-loopback address without \
+                         --http-api-token because --allow-unauthenticated-http was set: \
+                         the /mcp endpoint is unauthenticated"
+                    );
+                }
             }
             let http_token: Option<Arc<String>> = args.http_api_token.map(Arc::new);
 

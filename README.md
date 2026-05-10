@@ -65,6 +65,7 @@ audiobookshelf-mcp --server-url http://your-server:13378 --api-token <TOKEN> [OP
 | `--transport <stdio\|http>` | — | `stdio` | MCP transport to use |
 | `--http-bind <ADDR>` | — | `127.0.0.1:8080` | Bind address for HTTP transport |
 | `--http-api-token <TOKEN>` | `ABS_HTTP_API_TOKEN` | — | Bearer token protecting the HTTP/SSE endpoint |
+| `--allow-unauthenticated-http` | — | — | Explicitly allow unauthenticated HTTP on non-loopback bind addresses |
 | `--enable-tool <NAME>` | — | — | Enable a tool by name (repeatable) |
 | `--disable-tool <NAME>` | — | — | Disable a tool by name (repeatable, always wins) |
 | `--list-tools` | — | — | Print all tools with defaults and exit |
@@ -89,14 +90,12 @@ audiobookshelf-mcp --server-url http://your-server:13378 --api-token <TOKEN> --t
 | `get_in_progress` | enabled | Items currently in progress for the authenticated user |
 | `get_listening_stats` | enabled | Total time, per-day breakdown, most-listened items |
 | `get_recent_sessions` | enabled | Recent playback sessions, paginated |
-| `get_metadata_object` | enabled | Raw metadata object for a library item |
 | `find_items_missing_metadata` | enabled | Scan one library page for missing common metadata fields |
+| `get_audio_file_metadata_object` | **disabled** | Admin-only raw audio-file metadata extraction for a book item |
 | `update_progress` | **disabled** | Record playback position or mark item finished |
 | `create_bookmark` | **disabled** | Create a bookmark at a playback position |
 | `delete_bookmark` | **disabled** | Delete a bookmark by its exact time value |
 | `quick_match_item` | **disabled** | Quick-match metadata for one library item |
-| `batch_quick_match_items` | **disabled** | Quick-match metadata for multiple library items |
-| `batch_update_metadata` | **disabled** | Batch-update item metadata objects |
 
 Mutating tools are disabled by default to prevent unintended changes. Enable them individually:
 
@@ -104,10 +103,7 @@ Mutating tools are disabled by default to prevent unintended changes. Enable the
 audiobookshelf-mcp --server-url ... --api-token ... --enable-tool update_progress --enable-tool create_bookmark
 ```
 
-Metadata mutation payloads follow Audiobookshelf controller semantics: `quick_match_item` sends
-`overrideCover` and `overrideDetails` at the top level, `batch_quick_match_items` sends them under
-`options`, and `batch_update_metadata` sends an array of `{ id, mediaPayload: { metadata } }`
-entries.
+`quick_match_item` is disabled by default because it mutates metadata/covers and may overwrite existing details. `get_audio_file_metadata_object` is also disabled by default; it exposes Audiobookshelf's admin-oriented audio-file metadata extraction endpoint for book items and is distinct from `get_item`, which returns normal library item metadata.
 
 ## HTTP Transport
 
@@ -128,7 +124,7 @@ MCP clients connect to `http://<host>:8080/mcp` with:
 Authorization: Bearer your-secret-bearer-token
 ```
 
-`--http-api-token` is strongly recommended whenever binding to a network interface. Without it, anyone who can reach the port can use the server.
+When binding HTTP to a non-loopback address such as `0.0.0.0:8080`, the server requires `--http-api-token` / `ABS_HTTP_API_TOKEN` and fails closed without one. To intentionally expose an unauthenticated non-loopback HTTP endpoint, pass `--allow-unauthenticated-http`. Loopback binds without a token are allowed with a warning.
 
 > For internet-facing deployments, place behind a TLS-terminating reverse proxy (nginx, Caddy, Traefik). The server itself does not handle HTTPS.
 

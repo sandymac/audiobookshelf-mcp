@@ -133,18 +133,16 @@ HTTP error codes from Audiobookshelf get `[Hint: ...]` suffixes for LLM recovery
 | `get_in_progress` | enabled | `GET /api/me/items-in-progress` | Items currently in progress for the authenticated user |
 | `get_listening_stats` | enabled | `GET /api/me/listening-stats` | Total time, per-day breakdown, most-listened items |
 | `get_recent_sessions` | enabled | `GET /api/me/listening-sessions` | Recent playback sessions, paginated |
-| `get_metadata_object` | enabled | `GET /api/items/{id}/metadata-object` | Raw metadata object for one library item |
 | `find_items_missing_metadata` | enabled | `GET /api/libraries/{id}/items` | Scan one minified page for items missing common metadata fields |
+| `get_audio_file_metadata_object` | **disabled** | `GET /api/items/{id}/metadata-object` | Admin-only raw audio-file metadata extraction for a book item |
 | `update_progress` | **disabled** | `PATCH /api/me/progress/{id}` | Record playback position or mark item finished |
 | `create_bookmark` | **disabled** | `POST /api/me/item/{id}/bookmark` | Create a bookmark at a playback position |
 | `delete_bookmark` | **disabled** | `DELETE /api/me/item/{id}/bookmark/{time}` | Delete a bookmark by its exact time value |
 | `quick_match_item` | **disabled** | `POST /api/items/{id}/match` | Quick-match metadata for one library item |
-| `batch_quick_match_items` | **disabled** | `POST /api/items/batch/quickmatch` | Quick-match metadata for multiple library items |
-| `batch_update_metadata` | **disabled** | `POST /api/items/batch/update` | Batch-update item metadata objects |
 
-Mutating tools are disabled by default as they mutate server state. Enable with e.g. `--enable-tool update_progress` or `--enable-tool batch_update_metadata`.
+Mutating tools are disabled by default as they mutate server state. Enable with e.g. `--enable-tool update_progress` or `--enable-tool quick_match_item`.
 
-Metadata mutation payloads follow Audiobookshelf controller semantics: `quick_match_item` sends `overrideCover` and `overrideDetails` at the top level, `batch_quick_match_items` sends them under `options`, and `batch_update_metadata` sends an array of `{ id, mediaPayload: { metadata } }` entries.
+`quick_match_item` sends `overrideCover` and `overrideDetails` at the top level and is marked destructive because it can overwrite metadata/covers. `get_audio_file_metadata_object` is disabled by default; it exposes Audiobookshelf's admin-oriented book/audio-file metadata extraction endpoint and is distinct from `get_item`.
 
 ## Configuration (CLI flags / env vars)
 
@@ -155,6 +153,7 @@ Metadata mutation payloads follow Audiobookshelf controller semantics: `quick_ma
 | `--transport` | — | `stdio` (default) or `http` |
 | `--http-bind` | — | Bind address for HTTP transport (default: `127.0.0.1:8080`) |
 | `--http-api-token` | `ABS_HTTP_API_TOKEN` | Bearer token protecting the HTTP/SSE MCP endpoint |
+| `--allow-unauthenticated-http` | — | Explicitly allow unauthenticated HTTP on non-loopback bind addresses |
 | `--enable-tool <name>` | — | Enable a tool by name (repeatable) |
 | `--disable-tool <name>` | — | Disable a tool by name (repeatable, always wins) |
 | `--list-tools` | — | Print all tools with defaults and exit |

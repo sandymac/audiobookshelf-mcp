@@ -33,8 +33,6 @@ Every `#[tool]` attribute includes a `title` (human-readable display name) and `
 | `update_progress` | `destructive=false, idempotent=true, open_world=false` | Overwrites a position, but nothing is deleted and re-sending the same value is safe |
 | `create_bookmark` | `destructive=false, open_world=false` | Adds data, does not destroy anything |
 | `delete_bookmark` | `destructive=true, idempotent=true, open_world=false` | Permanently removes a bookmark; calling twice on the same time value is a no-op |
-| `quick_match_item` | `destructive=false, open_world=false` | Updates metadata for one item, but does not delete the item |
-| `batch_quick_match_items` | `destructive=false, open_world=false` | Updates metadata for multiple items, but does not delete items |
-| `batch_update_metadata` | `destructive=false, open_world=false` | Overwrites supplied metadata fields for multiple items, but does not delete items |
+| `quick_match_item` | `destructive=true, open_world=false` | Mutates metadata/covers and may overwrite existing details |
 
-Metadata mutation payloads mirror Audiobookshelf controllers: single-item match uses top-level `overrideCover` and `overrideDetails`, batch quick match uses `options.overrideCover` and `options.overrideDetails`, and batch metadata update posts an array of entries with `id` and `mediaPayload.metadata`.
+Metadata mutation payloads mirror Audiobookshelf controllers: single-item match uses top-level `overrideCover` and `overrideDetails`.

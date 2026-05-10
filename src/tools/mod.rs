@@ -22,14 +22,12 @@ pub const TOOL_REGISTRY: &[(&str, &str, bool)] = &[
     ("get_in_progress", "default", true),
     ("get_listening_stats", "default", true),
     ("get_recent_sessions", "default", true),
-    ("get_metadata_object", "metadata", true),
+    ("get_audio_file_metadata_object", "metadata", false),
     ("find_items_missing_metadata", "metadata", true),
     ("update_progress", "progress", false),
     ("create_bookmark", "progress", false),
     ("delete_bookmark", "progress", false),
     ("quick_match_item", "metadata", false),
-    ("batch_quick_match_items", "metadata", false),
-    ("batch_update_metadata", "metadata", false),
 ];
 
 #[derive(Clone)]
@@ -163,36 +161,7 @@ pub struct QuickMatchItemParams {
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
-pub struct BatchQuickMatchItemsParams {
-    /// Library item IDs to quick-match.
-    pub library_item_ids: Vec<String>,
-    /// Metadata provider to use, such as "audible", "google", or "openlibrary".
-    #[serde(default)]
-    pub provider: Option<String>,
-    /// Replace existing covers when true.
-    #[serde(default)]
-    pub override_cover: Option<bool>,
-    /// Replace existing metadata details when true.
-    #[serde(default)]
-    pub override_details: Option<bool>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-pub struct MetadataUpdate {
-    /// Library item ID to update.
-    pub item_id: String,
-    /// Audiobookshelf media metadata object to apply.
-    pub metadata: Value,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-pub struct BatchUpdateMetadataParams {
-    /// Metadata updates to apply.
-    pub updates: Vec<MetadataUpdate>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-pub struct GetMetadataObjectParams {
+pub struct GetAudioFileMetadataObjectParams {
     /// Library item ID. Obtain from `search_library` or `get_library_items`.
     pub item_id: String,
 }
@@ -221,45 +190,6 @@ fn build_quick_match_payload(params: &QuickMatchItemParams) -> Value {
     insert_optional_bool(&mut body, "overrideCover", params.override_cover);
     insert_optional_bool(&mut body, "overrideDetails", params.override_details);
     Value::Object(body)
-}
-
-fn build_batch_quick_match_payload(params: &BatchQuickMatchItemsParams) -> Value {
-    let mut body = Map::new();
-    body.insert(
-        "libraryItemIds".into(),
-        Value::Array(
-            params
-                .library_item_ids
-                .iter()
-                .map(|id| Value::String(id.clone()))
-                .collect(),
-        ),
-    );
-    let mut options = Map::new();
-    insert_optional_string(&mut options, "provider", &params.provider);
-    insert_optional_bool(&mut options, "overrideCover", params.override_cover);
-    insert_optional_bool(&mut options, "overrideDetails", params.override_details);
-    if !options.is_empty() {
-        body.insert("options".into(), Value::Object(options));
-    }
-    Value::Object(body)
-}
-
-fn build_batch_update_metadata_payload(params: &BatchUpdateMetadataParams) -> Value {
-    Value::Array(
-        params
-            .updates
-            .iter()
-            .map(|update| {
-                serde_json::json!({
-                    "id": update.item_id,
-                    "mediaPayload": {
-                        "metadata": update.metadata
-                    }
-                })
-            })
-            .collect(),
-    )
 }
 
 fn summarize_items_missing_metadata(
@@ -324,22 +254,15 @@ fn missing_metadata_fields(item: &Value) -> Vec<&'static str> {
         .and_then(|media| media.get("metadata"))
         .or_else(|| item.get("metadata"));
 
-    for field in [
-        "title",
-        "authors",
-        "narrators",
-        "description",
-        "publishedYear",
-        "isbn",
-        "asin",
-        "genres",
-        "series",
+    for (field, candidates) in [
+        ("title", &["title"][..]),
+        ("author", &["authors", "authorName"][..]),
+        ("narrator", &["narrators", "narratorName"][..]),
+        ("description", &["description"][..]),
+        ("publishedYear", &["publishedYear"][..]),
+        ("genres", &["genres"][..]),
     ] {
-        if metadata
-            .and_then(|metadata| metadata.get(field))
-            .map(is_metadata_value_present)
-            != Some(true)
-        {
+        if !metadata_fields_present(metadata, candidates) {
             missing.push(field);
         }
     }
@@ -355,6 +278,14 @@ fn missing_metadata_fields(item: &Value) -> Vec<&'static str> {
     }
 
     missing
+}
+
+fn metadata_fields_present(metadata: Option<&Value>, fields: &[&str]) -> bool {
+    fields.iter().any(|field| {
+        metadata
+            .and_then(|metadata| metadata.get(field))
+            .is_some_and(is_metadata_value_present)
+    })
 }
 
 fn is_metadata_value_present(value: &Value) -> bool {
@@ -474,15 +405,16 @@ impl AbsServer {
             .map_err(|e| e.to_string())
     }
 
-    /// Get the raw metadata object for a library item.
-    /// Use `search_library` or `get_library_items` to find item IDs.
+    /// Get the audio-file metadata object extracted by Audiobookshelf for a book item.
+    /// This admin-oriented raw audio-file metadata view is distinct from `get_item`
+    /// media metadata. Enable with: --enable-tool get_audio_file_metadata_object
     #[tool(
-        title = "Get Metadata Object",
+        title = "Get Audio File Metadata Object",
         annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
     )]
-    pub async fn get_metadata_object(
+    pub async fn get_audio_file_metadata_object(
         &self,
-        Parameters(params): Parameters<GetMetadataObjectParams>,
+        Parameters(params): Parameters<GetAudioFileMetadataObjectParams>,
     ) -> Result<String, String> {
         self.client
             .get(&format!("/items/{}/metadata-object", params.item_id))
@@ -663,10 +595,11 @@ impl AbsServer {
     }
 
     /// Quick-match metadata for one library item using Audiobookshelf's metadata providers.
-    /// Mutates the item metadata. Enable with: --enable-tool quick_match_item
+    /// Mutates item metadata/covers and may overwrite existing details.
+    /// Enable with: --enable-tool quick_match_item
     #[tool(
         title = "Quick Match Item",
-        annotations(destructive_hint = false, open_world_hint = false)
+        annotations(destructive_hint = true, open_world_hint = false)
     )]
     pub async fn quick_match_item(
         &self,
@@ -675,42 +608,6 @@ impl AbsServer {
         let body = build_quick_match_payload(&params);
         self.client
             .post(&format!("/items/{}/match", params.item_id), &body)
-            .await
-            .map(|v| serde_json::to_string_pretty(&v).unwrap_or_default())
-            .map_err(|e| e.to_string())
-    }
-
-    /// Quick-match metadata for multiple library items.
-    /// Mutates item metadata. Enable with: --enable-tool batch_quick_match_items
-    #[tool(
-        title = "Batch Quick Match Items",
-        annotations(destructive_hint = false, open_world_hint = false)
-    )]
-    pub async fn batch_quick_match_items(
-        &self,
-        Parameters(params): Parameters<BatchQuickMatchItemsParams>,
-    ) -> Result<String, String> {
-        let body = build_batch_quick_match_payload(&params);
-        self.client
-            .post("/items/batch/quickmatch", &body)
-            .await
-            .map(|v| serde_json::to_string_pretty(&v).unwrap_or_default())
-            .map_err(|e| e.to_string())
-    }
-
-    /// Batch-update metadata for multiple library items.
-    /// Mutates item metadata. Enable with: --enable-tool batch_update_metadata
-    #[tool(
-        title = "Batch Update Metadata",
-        annotations(destructive_hint = false, open_world_hint = false)
-    )]
-    pub async fn batch_update_metadata(
-        &self,
-        Parameters(params): Parameters<BatchUpdateMetadataParams>,
-    ) -> Result<String, String> {
-        let body = build_batch_update_metadata_payload(&params);
-        self.client
-            .post("/items/batch/update", &body)
             .await
             .map(|v| serde_json::to_string_pretty(&v).unwrap_or_default())
             .map_err(|e| e.to_string())
@@ -727,11 +624,7 @@ mod tests {
 
     #[test]
     fn metadata_mutation_tools_are_disabled_by_default() {
-        for name in [
-            "quick_match_item",
-            "batch_quick_match_items",
-            "batch_update_metadata",
-        ] {
+        for name in ["quick_match_item"] {
             let (_, _, enabled) = TOOL_REGISTRY
                 .iter()
                 .find(|(tool, _, _)| *tool == name)
@@ -741,13 +634,30 @@ mod tests {
     }
 
     #[test]
-    fn metadata_read_tools_are_enabled_by_default() {
-        for name in ["get_metadata_object", "find_items_missing_metadata"] {
+    fn unsafe_batch_metadata_mutation_tools_are_not_registered() {
+        for name in ["batch_quick_match_items", "batch_update_metadata"] {
+            assert!(
+                !TOOL_REGISTRY.iter().any(|(tool, _, _)| *tool == name),
+                "{name} should not be registered"
+            );
+        }
+    }
+
+    #[test]
+    fn default_metadata_tool_states_are_conservative() {
+        for name in ["find_items_missing_metadata"] {
             let (_, _, enabled) = TOOL_REGISTRY
                 .iter()
                 .find(|(tool, _, _)| *tool == name)
                 .unwrap_or_else(|| panic!("{name} should be registered"));
             assert!(enabled, "{name} should be enabled by default");
+        }
+        for name in ["get_audio_file_metadata_object"] {
+            let (_, _, enabled) = TOOL_REGISTRY
+                .iter()
+                .find(|(tool, _, _)| *tool == name)
+                .unwrap_or_else(|| panic!("{name} should be registered"));
+            assert!(!enabled, "{name} should be disabled by default");
         }
     }
 
@@ -779,58 +689,6 @@ mod tests {
     }
 
     #[test]
-    fn builds_batch_quick_match_payload_with_camel_case_ids() {
-        let payload = build_batch_quick_match_payload(&BatchQuickMatchItemsParams {
-            library_item_ids: vec!["item-1".into(), "item-2".into()],
-            provider: Some("google".into()),
-            override_cover: Some(false),
-            override_details: Some(true),
-        });
-
-        assert_eq!(
-            payload,
-            json!({
-                "libraryItemIds": ["item-1", "item-2"],
-                "options": {
-                    "provider": "google",
-                    "overrideCover": false,
-                    "overrideDetails": true
-                }
-            })
-        );
-    }
-
-    #[test]
-    fn builds_batch_update_metadata_payload_entries() {
-        let payload = build_batch_update_metadata_payload(&BatchUpdateMetadataParams {
-            updates: vec![MetadataUpdate {
-                item_id: "item-1".into(),
-                metadata: json!({
-                    "title": "A Wizard of Earthsea",
-                    "publishedYear": "1968",
-                    "genres": ["Fantasy"]
-                }),
-            }],
-        });
-
-        assert_eq!(
-            payload,
-            json!([
-                {
-                    "id": "item-1",
-                    "mediaPayload": {
-                        "metadata": {
-                            "title": "A Wizard of Earthsea",
-                            "publishedYear": "1968",
-                            "genres": ["Fantasy"]
-                        }
-                    }
-                }
-            ])
-        );
-    }
-
-    #[test]
     fn summarizes_items_missing_metadata() {
         let response = json!({
             "results": [
@@ -840,14 +698,12 @@ mod tests {
                         "coverPath": "/covers/complete.jpg",
                         "metadata": {
                             "title": "Complete Book",
-                            "authors": [{"name": "Author"}],
-                            "narrators": ["Narrator"],
+                            "authorName": "Author",
+                            "narratorName": "Narrator",
                             "description": "A book.",
                             "publishedYear": "2020",
-                            "isbn": "123",
-                            "asin": "B123",
                             "genres": ["Fiction"],
-                            "series": [{"name": "Series"}]
+                            "seriesName": "Series"
                         }
                     }
                 },
@@ -879,17 +735,67 @@ mod tests {
                     "id": "missing",
                     "title": "Sparse Book",
                     "missing_fields": [
-                        "authors",
-                        "narrators",
+                        "author",
+                        "narrator",
                         "description",
                         "publishedYear",
-                        "isbn",
-                        "asin",
                         "genres",
-                        "series",
                         "coverPath"
                     ]
                 }]
+            })
+        );
+    }
+
+    #[test]
+    fn summarizes_abs_minified_books_without_false_positive_metadata() {
+        let response = json!({
+            "results": [
+                {
+                    "id": "minified-complete",
+                    "media": {
+                        "metadata": {
+                            "title": "Minified Book",
+                            "authorName": "Octavia E. Butler",
+                            "narratorName": "Adenrele Ojo",
+                            "seriesName": "Patternist",
+                            "description": "A complete minified payload.",
+                            "publishedYear": "1976",
+                            "genres": ["Science Fiction"],
+                            "isbn": null,
+                            "asin": null
+                        },
+                        "coverPath": "/metadata/items/minified-complete/cover.jpg"
+                    }
+                },
+                {
+                    "id": "expanded-complete",
+                    "media": {
+                        "metadata": {
+                            "title": "Expanded Book",
+                            "authors": [{"id": "author-1", "name": "N. K. Jemisin"}],
+                            "narrators": [{"id": "narrator-1", "name": "Robin Miles"}],
+                            "description": "A complete expanded payload.",
+                            "publishedYear": "2015",
+                            "genres": ["Fantasy"]
+                        },
+                        "coverPath": "/metadata/items/expanded-complete/cover.jpg"
+                    }
+                }
+            ]
+        });
+
+        let summary = summarize_items_missing_metadata("lib-1", 0, 100, &response);
+
+        assert_eq!(
+            summary,
+            json!({
+                "library_id": "lib-1",
+                "page": 0,
+                "limit": 100,
+                "scanned": 2,
+                "missing_count": 0,
+                "items": []
             })
         );
     }
