@@ -8,7 +8,8 @@ By integrating this server, your AI assistant can query your libraries, search f
 
 - **Library & Search**: List libraries, search by title/author/narrator/series/ISBN, browse paginated items with sorting.
 - **Progress & Stats**: Check what's in progress, view listening statistics, browse playback session history.
-- **Safety Gates**: Mutating tools (progress updates, bookmarks) are disabled by default and must be explicitly enabled.
+- **Metadata Management**: Inspect metadata, find items with sparse metadata, and optionally enable quick-match or batch update tools.
+- **Safety Gates**: Mutating tools (progress updates, bookmarks, metadata changes) are disabled by default and must be explicitly enabled.
 - **Dual Transports**: Supports stdio (for local Claude Desktop use) and HTTP/SSE (for remote agentic frameworks).
 
 ## Requirements
@@ -88,15 +89,25 @@ audiobookshelf-mcp --server-url http://your-server:13378 --api-token <TOKEN> --t
 | `get_in_progress` | enabled | Items currently in progress for the authenticated user |
 | `get_listening_stats` | enabled | Total time, per-day breakdown, most-listened items |
 | `get_recent_sessions` | enabled | Recent playback sessions, paginated |
+| `get_metadata_object` | enabled | Raw metadata object for a library item |
+| `find_items_missing_metadata` | enabled | Scan one library page for missing common metadata fields |
 | `update_progress` | **disabled** | Record playback position or mark item finished |
 | `create_bookmark` | **disabled** | Create a bookmark at a playback position |
 | `delete_bookmark` | **disabled** | Delete a bookmark by its exact time value |
+| `quick_match_item` | **disabled** | Quick-match metadata for one library item |
+| `batch_quick_match_items` | **disabled** | Quick-match metadata for multiple library items |
+| `batch_update_metadata` | **disabled** | Batch-update item metadata objects |
 
-`update_progress`, `create_bookmark`, and `delete_bookmark` are disabled by default to prevent unintended mutations. Enable them individually:
+Mutating tools are disabled by default to prevent unintended changes. Enable them individually:
 
 ```bash
 audiobookshelf-mcp --server-url ... --api-token ... --enable-tool update_progress --enable-tool create_bookmark
 ```
+
+Metadata mutation payloads follow Audiobookshelf controller semantics: `quick_match_item` sends
+`overrideCover` and `overrideDetails` at the top level, `batch_quick_match_items` sends them under
+`options`, and `batch_update_metadata` sends an array of `{ id, mediaPayload: { metadata } }`
+entries.
 
 ## HTTP Transport
 

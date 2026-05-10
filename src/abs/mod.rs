@@ -42,7 +42,10 @@ impl AbsClient {
                 status
             );
         }
-        let user: Value = resp.json().await.context("unexpected response from /api/me")?;
+        let user: Value = resp
+            .json()
+            .await
+            .context("unexpected response from /api/me")?;
         tracing::info!(
             username = user["username"].as_str().unwrap_or("unknown"),
             server = %self.base_url,
@@ -59,7 +62,11 @@ impl AbsClient {
         self.parse_response(resp).await
     }
 
-    pub async fn get_with_params(&self, path: &str, params: &[(&str, String)]) -> anyhow::Result<Value> {
+    pub async fn get_with_params(
+        &self,
+        path: &str,
+        params: &[(&str, String)],
+    ) -> anyhow::Result<Value> {
         let url = format!("{}/api{}", self.base_url, path);
         let resp = self.client.get(&url).query(params).send().await?;
         self.parse_response(resp).await
